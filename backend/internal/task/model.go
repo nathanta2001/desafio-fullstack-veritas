@@ -10,7 +10,7 @@ type TaskStatus string
 
 const (
 	StatusAfazer      TaskStatus = "afazer"
-	StatusEmprogresso TaskStatus = "emprogresso"
+	StatusEmProgresso TaskStatus = "emprogresso"
 	StatusFeito       TaskStatus = "feito"
 )
 
@@ -19,38 +19,34 @@ type Task struct {
 	Titulo     string     `json:"titulo"`
 	Descricao  string     `json:"descricao"`
 	Status     TaskStatus `json:"status"`
-	DataInicio *string    `json:"data_inicio,omitempty"`
-	DataFim    *string    `json:"data_fim,omitempty"`
+	DataInicio *time.Time `json:"data_inicio,omitempty"`
+	DataFim    *time.Time `json:"data_fim,omitempty"`
 }
 
 func (s TaskStatus) IsValid() bool {
-
 	switch s {
-	case StatusAfazer, StatusEmprogresso, StatusFeito:
+	case StatusAfazer, StatusEmProgresso, StatusFeito:
 		return true
 	default:
 		return false
 	}
-
 }
 
 func (t *Task) Validate() error {
-
-	if strings.TrimSpace(t.Titulo) == "" {
-		return errors.New("A tarefa deve ter um Título")
+	titulo := strings.TrimSpace(t.Titulo)
+	if titulo == "" {
+		return errors.New("o título da tarefa é obrigatório")
 	}
-
+	if len(titulo) > 80 {
+		return errors.New("o título da tarefa não pode exceder 80 caracteres")
+	}
 	if !t.Status.IsValid() {
-		return errors.New("Status inválido")
+		return errors.New("status inválido. Use: 'afazer', 'emprogresso' ou 'feito'")
 	}
 
-	// se as duas datas forem fornecidas, data_inicio não pode ser depois da data_fim
-	if t.DataInicio != nil && t.DataFim != nil && *t.DataInicio != "" && *t.DataFim != "" {
-		inicio, errIni := time.Parse(time.RFC3339, *t.DataInicio)
-		fim, errFim := time.Parse(time.RFC3339, *t.DataFim)
-
-		if errIni == nil && errFim == nil && inicio.After(fim) {
-			return errors.New("a data de fim deve ser superior à data de início")
+	if t.DataInicio != nil && t.DataFim != nil {
+		if t.DataInicio.After(*t.DataFim) {
+			return errors.New("a data de início não pode ser posterior à data de fim")
 		}
 	}
 

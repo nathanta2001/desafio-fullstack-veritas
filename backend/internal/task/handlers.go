@@ -2,31 +2,91 @@ package task
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 )
 
+const defaultJSONFilePath = "tasks.json"
+
 type TaskHandler struct {
-	mu     sync.RWMutex
-	tasks  map[int]Task
-	nextID int
+	mu       sync.RWMutex
+	tasks    map[int]Task
+	nextID   int
+	jsonPath string
 }
 
 func NewTaskHandler() *TaskHandler {
-
-	return &TaskHandler{
-		tasks:  make(map[int]Task),
-		nextID: 1,
-	}
-
+	return NewTaskHandlerWithPath(defaultJSONFilePath)
 }
 
-// ServeHTTP como roteador para os endpoints de tarefas
-func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func NewTaskHandlerWithPath(path string) *TaskHandler {
+	h := &TaskHandler{
+		tasks:    make(map[int]Task),
+		nextID:   1,
+		jsonPath: path,
+	}
+	h.loadFromFile()
+	return h
+}
 
-	//cors
+func (h *TaskHandler) loadFromFile() {
+	file, err := os.ReadFile(h.jsonPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("[WARNING] Erro ao ler arquivo de tarefas (%s): %v", h.jsonPath, err)
+		}
+		return
+	}
+
+	var savedTasks []Task
+	if err := json.Unmarshal(file, &savedTasks); err != nil {
+		log.Printf("[ERROR] Erro ao deserializar tarefas do arquivo: %v", err)
+		return
+	}
+
+	maxID := 0
+	for _, t := range savedTasks {
+		h.tasks[t.ID] = t
+		if t.ID > maxID {
+			maxID = t.ID
+		}
+	}
+	h.nextID = maxID + 1
+}
+
+func (h *TaskHandler) saveToFile() {
+	taskList := make([]Task, 0, len(h.tasks))
+	for _, t := range h.tasks {
+		taskList = append(taskList, t)
+	}
+
+	data, err := json.MarshalIndent(taskList, "", "  ")
+	if err != nil {
+		log.Printf("[ERROR] Erro ao serializar tarefas para JSON: %v", err)
+		return
+	}
+
+	tmpFile := h.jsonPath + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		log.Printf("[ERROR] Erro ao escrever arquivo temporário (%s): %v", tmpFile, err)
+		return
+	}
+
+	if err := os.Rename(tmpFile, h.jsonPath); err != nil {
+		log.Printf("[ERROR] Erro ao renomear arquivo de persistência: %v", err)
+	}
+}
+
+func (h *TaskHandler) writeJSONError(w http.ResponseWriter, message string, statusCode int) {
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -48,14 +108,14 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPost:
 			h.createTask(w, r)
 		default:
-			http.Error(w, `{"error": "Método não permitido"}`, http.StatusMethodNotAllowed)
+			h.writeJSONError(w, "Método não permitido", http.StatusMethodNotAllowed)
 		}
 		return
 	}
 
 	id, err := strconv.Atoi(path)
 	if err != nil {
-		http.Error(w, `{"error": "ID inválido"}`, http.StatusBadRequest)
+		h.writeJSONError(w, "ID inválido", http.StatusBadRequest)
 		return
 	}
 
@@ -65,7 +125,7 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		h.deleteTask(w, r, id)
 	default:
-		http.Error(w, `{"error": "Método não permitido"}`, http.StatusMethodNotAllowed)
+		h.writeJSONError(w, "Método não permitido", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -78,24 +138,25 @@ func (h *TaskHandler) getTasks(w http.ResponseWriter, r *http.Request) {
 		taskList = append(taskList, t)
 	}
 
-	json.NewEncoder(w).Encode(taskList)
+	_ = json.NewEncoder(w).Encode(taskList)
 }
 
 func (h *TaskHandler) createTask(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // Limite de 1MB no body
+	defer r.Body.Close()
+
 	var t Task
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		http.Error(w, `{"error": "JSON inválido"}`, http.StatusBadRequest)
+		h.writeJSONError(w, "JSON inválido ou corpo da requisição muito grande", http.StatusBadRequest)
 		return
 	}
 
-	// Define status inicial padrão caso não seja informado
 	if t.Status == "" {
 		t.Status = StatusAfazer
 	}
 
 	if err := t.Validate(); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		h.writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -103,22 +164,25 @@ func (h *TaskHandler) createTask(w http.ResponseWriter, r *http.Request) {
 	t.ID = h.nextID
 	h.nextID++
 	h.tasks[t.ID] = t
+	h.saveToFile()
 	h.mu.Unlock()
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(t)
+	_ = json.NewEncoder(w).Encode(t)
 }
 
 func (h *TaskHandler) updateTask(w http.ResponseWriter, r *http.Request, id int) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // Limite de 1MB no body
+	defer r.Body.Close()
+
 	var updatedTask Task
 	if err := json.NewDecoder(r.Body).Decode(&updatedTask); err != nil {
-		http.Error(w, `{"error": "JSON inválido"}`, http.StatusBadRequest)
+		h.writeJSONError(w, "JSON inválido ou corpo da requisição muito grande", http.StatusBadRequest)
 		return
 	}
 
 	if err := updatedTask.Validate(); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		h.writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -126,14 +190,15 @@ func (h *TaskHandler) updateTask(w http.ResponseWriter, r *http.Request, id int)
 	defer h.mu.Unlock()
 
 	if _, exists := h.tasks[id]; !exists {
-		http.Error(w, `{"error": "Tarefa não encontrada"}`, http.StatusNotFound)
+		h.writeJSONError(w, "Tarefa não encontrada", http.StatusNotFound)
 		return
 	}
 
 	updatedTask.ID = id
 	h.tasks[id] = updatedTask
+	h.saveToFile()
 
-	json.NewEncoder(w).Encode(updatedTask)
+	_ = json.NewEncoder(w).Encode(updatedTask)
 }
 
 func (h *TaskHandler) deleteTask(w http.ResponseWriter, r *http.Request, id int) {
@@ -141,10 +206,11 @@ func (h *TaskHandler) deleteTask(w http.ResponseWriter, r *http.Request, id int)
 	defer h.mu.Unlock()
 
 	if _, exists := h.tasks[id]; !exists {
-		http.Error(w, `{"error": "Tarefa não encontrada"}`, http.StatusNotFound)
+		h.writeJSONError(w, "Tarefa não encontrada", http.StatusNotFound)
 		return
 	}
 
 	delete(h.tasks, id)
+	h.saveToFile()
 	w.WriteHeader(http.StatusNoContent)
 }
