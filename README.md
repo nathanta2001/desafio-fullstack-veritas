@@ -1,4 +1,4 @@
-# Mini Kanban de Tarefas — React + Go
+# Mini Kanban de Tarefas - React + Go
 
 Aplicação Fullstack para gerenciamento de tarefas no estilo **Kanban**, desenvolvida com **backend RESTful em Go** e **frontend em React com Ant Design**.
 
@@ -16,7 +16,7 @@ Antes de executar, certifique-se de ter instalado:
 
 ---
 
-## 1. Backend — Go
+## 1. Backend - Go
 
 Entre na pasta do backend:
 
@@ -44,7 +44,7 @@ go test ./...
 
 ---
 
-## 2. Frontend — React
+## 2. Frontend - React
 
 Entre na pasta do frontend:
 
@@ -150,23 +150,42 @@ O sistema utiliza **Web Notifications** para monitorar os prazos das tarefas e d
 ## Estrutura do Projeto
 
 ```text
-.
-├── backend/
+
+desafio veritas/
+├── backend/                  # API RESTful em Go
 │   ├── cmd/
 │   │   └── server/
-│   │       └── main.go
-│   └── internal/
-│       └── task/
-│           ├── handlers.go
-│           └── models.go
+│   │       └── main.go       # Ponto de entrada (Server HTTP com Graceful Shutdown)
+│   ├── internal/
+│   │   └── task/             # Regras de negócio de Tarefas
+│   │       ├── handlers.go   # Handlers HTTP, rotas REST e escrita atômica em JSON
+│   │       ├── model.go      # Modelos de dados, validações e tipos Go
+│   │       └── handlers_test.go # Testes unitários com arquivos isolados
+│   ├── go.mod                # Gerenciamento de módulos Go
+│   └── tasks.json            # Persistência de dados em arquivo JSON
 │
-├── frontend/
+├── frontend/                 # Interface Web em React (Vite)
 │   ├── src/
+│   │   ├── api/
+│   │   │   └── axiosClient.js # Configuração do cliente Axios com env vars
+│   │   ├── components/
+│   │   │   ├── Kanban/       # KanbanBoard, KanbanColumn, TaskCard
+│   │   │   └── Modals/       # Modais de Criação/Edição e Visualização Detalhada
+│   │   ├── hooks/
+│   │   │   ├── useTasksQuery.js # Custom Hook (TanStack Query) para CRUD
+│   │   │   └── useTaskNotifier.js # Monitor de prazos e notificações Web Push
+│   │   ├── services/
+│   │   │   └── taskService.js # Comunicação direta com os endpoints Go
+│   │   ├── theme/
+│   │   │   └── themeConfig.js # Design System e tokens Dark Mode (Ant Design v5)
+│   │   ├── App.jsx           # Componente raiz da aplicação
+│   │   ├── main.jsx          # Providers globais (QueryClient e AntD Config)
+│   │   └── setupTests.js     # Setup de Mocks para ambiente Vitest/JSDom
 │   ├── package.json
-│   └── ...
+│   └── vite.config.js
 │
-├── tasks.json
-└── README.md
+└── docs/                     # Documentação e Diagramas
+    └── user-flow.png         # Diagrama visual do Fluxo do Usuário (User Flow)
 ```
 
 ---
