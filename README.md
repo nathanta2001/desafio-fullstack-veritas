@@ -2,7 +2,7 @@
 
 Aplicação Fullstack para gerenciamento de tarefas no estilo **Kanban**, desenvolvida com **backend RESTful em Go** e **frontend em React com Ant Design**.
 
-> 🔗 **Aplicação em Produção**: https://desafio-fullstack-veritas.vercel.app  
+> 🔗 **Aplicação em Produção**: https://desafio-fullstack-veritas-henna.vercel.app/
 > 🔗 **API Backend (Fly.io)**: https://backend-wandering-hillside-106.fly.dev/tasks
 
 ---
