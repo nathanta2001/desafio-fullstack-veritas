@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,7 +21,14 @@ func main() {
 	mux.Handle("/tasks", taskHandler)
 	mux.Handle("/tasks/", taskHandler)
 
-	port := ":8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
+	}
+
 	srv := &http.Server{
 		Addr:         port,
 		Handler:      mux,

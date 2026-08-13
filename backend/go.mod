@@ -1,3 +1,3 @@
 module github.com/nathanta2001/desafio-fullstack-veritas
 
-go 1.26.5
+go 1.22
